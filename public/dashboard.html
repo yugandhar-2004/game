@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link rel="stylesheet" type="text/css" href="styles.css">
+</head>
+<body>
+    <h2>Welcome to your Dashboard</h2>
+    <form action="/send-message" method="POST">
+        <input type="text" name="toUserId" placeholder="Recipient User ID" required><br>
+        <textarea name="message" placeholder="Write a message" required></textarea><br>
+        <button type="submit">Send Message</button>
+    </form>
+    <h3>Your Messages</h3>
+    <ul id="messages"></ul>
+    <script>
+        fetch('/messages')
+            .then(response => response.json())
+            .then(data => {
+                const messagesList = document.getElementById('messages');
+                data.forEach(msg => {
+                    const li = document.createElement('li');
+                    li.textContent = `From ${msg.from}: ${msg.message}`;
+                    messagesList.appendChild(li);
+                });
+            });
+    </script>
+    <br>
+    <a href="/logout">Logout</a>
+</body>
+</html>
