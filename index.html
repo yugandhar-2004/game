@@ -1,169 +1,114 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Tic Tac Toe</title>
+  <title>Multiplayer Tic Tac Toe</title>
   <style>
-    body {
-      font-family: Arial;
-      text-align: center;
-      background: #f4f4f4;
-    }
-
-    .container {
-      margin-top: 30px;
-    }
-
-    .board {
-      display: grid;
-      grid-template-columns: repeat(3, 100px);
-      gap: 5px;
-      justify-content: center;
-      margin-top: 20px;
-    }
-
-    .cell {
-      width: 100px;
-      height: 100px;
-      background: white;
-      border: 2px solid black;
-      font-size: 60px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-    }
-
-    .cell:hover {
-      background: #ddd;
-    }
-
-    button {
-      margin-top: 20px;
-      padding: 10px 20px;
-      font-size: 16px;
-    }
+    body { font-family: Arial; text-align: center; background: #f4f4f4; }
+    .board { display: grid; grid-template-columns: repeat(3, 100px); gap: 5px; justify-content: center; margin-top: 20px; }
+    .cell { width: 100px; height: 100px; background: white; border: 2px solid black; font-size: 60px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .cell:hover { background: #ddd; }
+    button { margin-top: 20px; padding: 10px 20px; font-size: 16px; }
   </style>
 </head>
-
 <body>
 
-<div class="container">
-  <h2>Tic Tac Toe</h2>
-  <p id="playerInfo"></p>
-
-  <div class="board">
-    <div class="cell" onclick="play(0)"></div>
-    <div class="cell" onclick="play(1)"></div>
-    <div class="cell" onclick="play(2)"></div>
-    <div class="cell" onclick="play(3)"></div>
-    <div class="cell" onclick="play(4)"></div>
-    <div class="cell" onclick="play(5)"></div>
-    <div class="cell" onclick="play(6)"></div>
-    <div class="cell" onclick="play(7)"></div>
-    <div class="cell" onclick="play(8)"></div>
-  </div>
-
-  <h3 id="status">Your turn (X)</h3>
-  <button onclick="resetGame()">Restart Game</button>
+<h2>Multiplayer Tic Tac Toe</h2>
+<p id="playerInfo"></p>
+<div class="board">
+  <div class="cell" onclick="play(0)"></div>
+  <div class="cell" onclick="play(1)"></div>
+  <div class="cell" onclick="play(2)"></div>
+  <div class="cell" onclick="play(3)"></div>
+  <div class="cell" onclick="play(4)"></div>
+  <div class="cell" onclick="play(5)"></div>
+  <div class="cell" onclick="play(6)"></div>
+  <div class="cell" onclick="play(7)"></div>
+  <div class="cell" onclick="play(8)"></div>
 </div>
 
+<h3 id="status">Connecting to server...</h3>
+<button onclick="resetBoard()">Restart Game</button>
+
 <script>
-// ---- Get user data from Adalo ----
 const params = new URLSearchParams(window.location.search);
 const userId = params.get("userId");
 const name = params.get("name");
+document.getElementById("playerInfo").innerText = "Player: " + name + " | User ID: " + userId;
 
-document.getElementById("playerInfo").innerText =
-  "Player: " + name + " | User ID: " + userId;
+let board = Array(9).fill("");
+let symbol = "";
+let myTurn = false;
 
-// ======== IMPORTANT: PUT YOUR ADALO API KEY HERE ========
-const ADALO_API_KEY = "PASTE_YOUR_API_KEY_HERE";
+const socket = new WebSocket("wss://YOUR_SERVER_URL:8080");
 
-// ---- Tic Tac Toe Logic ----
-let board = ["", "", "", "", "", "", "", "", ""];
-let currentPlayer = "X";
+socket.onopen = () => {
+  socket.send(JSON.stringify({ type: "join", userId, name }));
+};
+
+socket.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+
+  if (data.type === "waiting") {
+    document.getElementById("status").innerText = data.msg;
+  }
+
+  if (data.type === "start") {
+    symbol = data.symbol;
+    myTurn = symbol === "X"; // X starts first
+    document.getElementById("status").innerText = "Game started! You are " + symbol + (myTurn ? " (Your turn)" : " (Opponent's turn)");
+  }
+
+  if (data.type === "update") {
+    board[data.index] = data.symbol;
+    document.getElementsByClassName("cell")[data.index].innerText = data.symbol;
+    myTurn = data.symbol !== symbol; // your turn if opponent just played
+    document.getElementById("status").innerText = myTurn ? "Your turn" : "Opponent's turn";
+  }
+
+  if (data.type === "winner") {
+    document.getElementById("status").innerText = "Winner: " + data.winnerSymbol;
+  }
+};
 
 function play(index) {
+  if (!myTurn) return;
   if (board[index] !== "") return;
 
-  board[index] = currentPlayer;
-  document.getElementsByClassName("cell")[index].innerText = currentPlayer;
+  board[index] = symbol;
+  document.getElementsByClassName("cell")[index].innerText = symbol;
+  myTurn = false;
+  document.getElementById("status").innerText = "Opponent's turn";
 
-  if (checkWinner()) {
-    document.getElementById("status").innerText =
-      currentPlayer + " Wins! 🎉 +10 Coins";
+  socket.send(JSON.stringify({ type: "move", index }));
 
-    // Give +10 coins to this user in Adalo
-    addCoinsToUser(10);
-    return;
+  // Local check for win (server will also validate)
+  const winner = checkWinner(board);
+  if (winner) {
+    document.getElementById("status").innerText = "Winner: " + winner + " (+10 coins if you won)";
+    if (winner === symbol) {
+      socket.send(JSON.stringify({ type: "winner" }));
+    }
   }
-
-  if (!board.includes("")) {
-    document.getElementById("status").innerText = "It's a Draw 🤝";
-    return;
-  }
-
-  currentPlayer = currentPlayer === "X" ? "O" : "X";
-  document.getElementById("status").innerText =
-    "Your turn (" + currentPlayer + ")";
 }
 
-function checkWinner() {
-  const winPatterns = [
+function checkWinner(b) {
+  const lines = [
     [0,1,2],[3,4,5],[6,7,8],
     [0,3,6],[1,4,7],[2,5,8],
     [0,4,8],[2,4,6]
   ];
-
-  for (let pattern of winPatterns) {
-    const [a,b,c] = pattern;
-    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-      return true;
-    }
+  for (const [a,b1,c] of lines) {
+    if (b[a] && b[a] === b[b1] && b[a] === b[c]) return b[a];
   }
-  return false;
+  return null;
 }
 
-async function addCoinsToUser(amount) {
-
-  const url = `https://api.adalo.com/db/users/${userId}`;
-
-  // First get current coins
-  const getResponse = await fetch(url, {
-    headers: {
-      "Authorization": `Bearer ${ADALO_API_KEY}`
-    }
-  });
-
-  const userData = await getResponse.json();
-  const currentCoins = userData.Coins || 0;
-
-  const newCoins = currentCoins + amount;
-
-  // Now update coins in Adalo
-  await fetch(url, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${ADALO_API_KEY}`
-    },
-    body: JSON.stringify({
-      "Coins": newCoins
-    })
-  });
-
-  alert("You earned +10 coins! Total: " + newCoins);
-}
-
-function resetGame() {
-  board = ["", "", "", "", "", "", "", "", ""];
-  currentPlayer = "X";
-  document.getElementById("status").innerText = "Your turn (X)";
-
-  const cells = document.getElementsByClassName("cell");
-  for (let cell of cells) {
-    cell.innerText = "";
-  }
+function resetBoard() {
+  board = Array(9).fill("");
+  symbol = symbol; // keep same symbol
+  myTurn = symbol === "X";
+  document.getElementById("status").innerText = myTurn ? "Your turn" : "Opponent's turn";
+  Array.from(document.getElementsByClassName("cell")).forEach(c => c.innerText = "");
 }
 </script>
 
