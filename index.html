@@ -1,116 +1,72 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Multiplayer Tic Tac Toe</title>
-  <style>
-    body { font-family: Arial; text-align: center; background: #f4f4f4; }
-    .board { display: grid; grid-template-columns: repeat(3, 100px); gap: 5px; justify-content: center; margin-top: 20px; }
-    .cell { width: 100px; height: 100px; background: white; border: 2px solid black; font-size: 60px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-    .cell:hover { background: #ddd; }
-    button { margin-top: 20px; padding: 10px 20px; font-size: 16px; }
-  </style>
+<title>Real-Time Tic Tac Toe</title>
+<style>
+  #board { display:grid; grid-template-columns:repeat(3,100px); gap:5px; margin:20px auto; }
+  .cell { width:100px; height:100px; font-size:50px; display:flex; align-items:center; justify-content:center; border:2px solid #333; cursor:pointer; }
+</style>
 </head>
 <body>
+<h1>Real-Time Tic Tac Toe</h1>
+<label>Room ID: <input type="text" id="roomID"></label>
+<label>Player Name: <input type="text" id="playerName"></label>
+<button id="joinBtn">Join Room</button>
 
-<h2>Multiplayer Tic Tac Toe</h2>
-<p id="playerInfo"></p>
-<div class="board">
-  <div class="cell" onclick="play(0)"></div>
-  <div class="cell" onclick="play(1)"></div>
-  <div class="cell" onclick="play(2)"></div>
-  <div class="cell" onclick="play(3)"></div>
-  <div class="cell" onclick="play(4)"></div>
-  <div class="cell" onclick="play(5)"></div>
-  <div class="cell" onclick="play(6)"></div>
-  <div class="cell" onclick="play(7)"></div>
-  <div class="cell" onclick="play(8)"></div>
-</div>
-
-<h3 id="status">Connecting to server...</h3>
-<button onclick="resetBoard()">Restart Game</button>
+<div id="board" style="display:none;"></div>
+<div id="status"></div>
 
 <script>
-const params = new URLSearchParams(window.location.search);
-const userId = params.get("userId");
-const name = params.get("name");
-document.getElementById("playerInfo").innerText = "Player: " + name + " | User ID: " + userId;
+let ws;
+let mySymbol = "X";
+let board = ["","","","","","","","",""];
+let roomID, playerName;
 
-let board = Array(9).fill("");
-let symbol = "";
-let myTurn = false;
+document.getElementById("joinBtn").addEventListener("click", ()=>{
+  roomID = document.getElementById("roomID").value.trim();
+  playerName = document.getElementById("playerName").value.trim();
+  if(!roomID||!playerName){ alert("Enter name and room"); return; }
 
-const socket = new WebSocket("wss://YOUR_SERVER_URL:8080");
+  ws = new WebSocket("ws://YOUR_SERVER_URL:8080");
 
-socket.onopen = () => {
-  socket.send(JSON.stringify({ type: "join", userId, name }));
-};
-
-socket.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-
-  if (data.type === "waiting") {
-    document.getElementById("status").innerText = data.msg;
+  ws.onopen = ()=> {
+    ws.send(JSON.stringify({ type:"join", roomID, player: playerName }));
   }
 
-  if (data.type === "start") {
-    symbol = data.symbol;
-    myTurn = symbol === "X"; // X starts first
-    document.getElementById("status").innerText = "Game started! You are " + symbol + (myTurn ? " (Your turn)" : " (Opponent's turn)");
+  ws.onmessage = (msg)=>{
+    const data = JSON.parse(msg.data);
+    if(data.type==="joined") mySymbol = data.symbol;
+    if(data.type==="update") { board = data.board; updateBoard(data.board); document.getElementById("status").innerText="Current Turn: "+data.currentPlayer; }
+    if(data.type==="end") { document.getElementById("status").innerText="Winner: "+data.winner; }
   }
 
-  if (data.type === "update") {
-    board[data.index] = data.symbol;
-    document.getElementsByClassName("cell")[data.index].innerText = data.symbol;
-    myTurn = data.symbol !== symbol; // your turn if opponent just played
-    document.getElementById("status").innerText = myTurn ? "Your turn" : "Opponent's turn";
+  document.getElementById("board").style.display="grid";
+  createBoard();
+});
+
+function createBoard(){
+  const boardDiv = document.getElementById("board");
+  boardDiv.innerHTML="";
+  for(let i=0;i<9;i++){
+    const cell = document.createElement("div");
+    cell.className="cell";
+    cell.id="cell"+i;
+    cell.addEventListener("click", ()=> makeMove(i));
+    boardDiv.appendChild(cell);
   }
+  updateBoard(board);
+}
 
-  if (data.type === "winner") {
-    document.getElementById("status").innerText = "Winner: " + data.winnerSymbol;
-  }
-};
-
-function play(index) {
-  if (!myTurn) return;
-  if (board[index] !== "") return;
-
-  board[index] = symbol;
-  document.getElementsByClassName("cell")[index].innerText = symbol;
-  myTurn = false;
-  document.getElementById("status").innerText = "Opponent's turn";
-
-  socket.send(JSON.stringify({ type: "move", index }));
-
-  // Local check for win (server will also validate)
-  const winner = checkWinner(board);
-  if (winner) {
-    document.getElementById("status").innerText = "Winner: " + winner + " (+10 coins if you won)";
-    if (winner === symbol) {
-      socket.send(JSON.stringify({ type: "winner" }));
-    }
+function updateBoard(b){
+  for(let i=0;i<9;i++){
+    document.getElementById("cell"+i).innerText = b[i];
   }
 }
 
-function checkWinner(b) {
-  const lines = [
-    [0,1,2],[3,4,5],[6,7,8],
-    [0,3,6],[1,4,7],[2,5,8],
-    [0,4,8],[2,4,6]
-  ];
-  for (const [a,b1,c] of lines) {
-    if (b[a] && b[a] === b[b1] && b[a] === b[c]) return b[a];
-  }
-  return null;
-}
-
-function resetBoard() {
-  board = Array(9).fill("");
-  symbol = symbol; // keep same symbol
-  myTurn = symbol === "X";
-  document.getElementById("status").innerText = myTurn ? "Your turn" : "Opponent's turn";
-  Array.from(document.getElementsByClassName("cell")).forEach(c => c.innerText = "");
+function makeMove(index){
+  if(board[index]!=="" || !ws) return;
+  ws.send(JSON.stringify({ type:"move", roomID, player: playerName, move:index }));
 }
 </script>
-
 </body>
 </html>
