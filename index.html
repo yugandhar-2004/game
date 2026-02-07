@@ -26,8 +26,8 @@ document.getElementById("joinBtn").addEventListener("click", ()=>{
   roomID = document.getElementById("roomID").value.trim();
   playerName = document.getElementById("playerName").value.trim();
   if(!roomID||!playerName){ alert("Enter name and room"); return; }
+ws = new WebSocket("wss://tic-tac-toe-server-57go.onrender.com");
 
-  ws = new WebSocket("ws://YOUR_SERVER_URL:8080");
 
   ws.onopen = ()=> {
     ws.send(JSON.stringify({ type:"join", roomID, player: playerName }));
@@ -70,3 +70,4 @@ function makeMove(index){
 </script>
 </body>
 </html>
+
